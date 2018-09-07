@@ -25,6 +25,12 @@ public class CDAEntryJsonMapper implements Serializable {
         this.type = type;
     }
 
+
+    public CDAEntryJsonMapper(String id, Map<String, Object> rawFields){
+        this.id = id;
+        this.rawFields = rawFields;
+    }
+
     public CDAEntryJsonMapper() {
 
     }

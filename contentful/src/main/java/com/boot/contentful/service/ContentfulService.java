@@ -8,8 +8,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
 
@@ -96,7 +99,8 @@ public class ContentfulService {
     }
 
 
-    //@Cacheable(value = "SingleEntry", key = "#id.concat(#locale)")
+    @Cacheable(value = "SingleEntry", key = "#id.concat(#locale)")
+    @Transactional(readOnly = true)
     public String getSingleEntry(Locale locale, String id) {
         CDAEntry cdaEntry = null;
         //6EczfGnuHCIYGGwEwIqiq2
@@ -119,13 +123,21 @@ public class ContentfulService {
                                 .one(id);
             }
 
-            if(null == cdaEntry){
+            if (null == cdaEntry) {
                 throw new Exception("No Data found");
             }
 
             Gson gson = new Gson();
-            CDAEntryJsonMapper CDAEntryJsonMapper = new CDAEntryJsonMapper(cdaEntry.id(), cdaEntry.rawFields(), cdaEntry.attrs(), cdaEntry.locale(), cdaEntry.contentType(), cdaEntry.type());
-            return gson.toJsonTree(CDAEntryJsonMapper)
+            //CDAEntryJsonMapper CDAEntryJsonMapper = new CDAEntryJsonMapper(cdaEntry.id(), cdaEntry.rawFields(), cdaEntry.attrs(), cdaEntry.locale(), cdaEntry.contentType(), cdaEntry.type());
+            CDAEntryJsonMapper cdaEntryJsonMapper = new CDAEntryJsonMapper(cdaEntry.id(), cdaEntry.rawFields());
+
+            if (null != cdaEntryJsonMapper && null != cdaEntryJsonMapper.getRawFields()) {
+
+                cdaEntryJsonMapper.getRawFields().remove("createdEntries");
+
+            }
+
+            return gson.toJsonTree(cdaEntryJsonMapper)
                     .getAsJsonObject().toString();
 
 
@@ -136,6 +148,54 @@ public class ContentfulService {
         }
     }
 
+
+    @CachePut(value = "SingleEntry", key = "#id.concat(#locale)")
+    @Transactional(readOnly = true)
+    public String getSingleEntryUpdate(Locale locale, String id) {
+        CDAEntry cdaEntry = null;
+        //6EczfGnuHCIYGGwEwIqiq2
+        try {
+
+            if (usePreviewApi()) {
+
+                cdaEntry =
+                        contentfulPreviewClient
+                                .fetch(CDAEntry.class)
+                                .where("locale", locale.toString())
+                                .one(id);
+
+            } else {
+
+                cdaEntry =
+                        contentfulDeliveryClient
+                                .fetch(CDAEntry.class)
+                                .where("locale", locale.toString())
+                                .one(id);
+            }
+
+            if (null == cdaEntry) {
+                throw new Exception("No Data found");
+            }
+
+            Gson gson = new Gson();
+            //CDAEntryJsonMapper CDAEntryJsonMapper = new CDAEntryJsonMapper(cdaEntry.id(), cdaEntry.rawFields(), cdaEntry.attrs(), cdaEntry.locale(), cdaEntry.contentType(), cdaEntry.type());
+            CDAEntryJsonMapper cdaEntryJsonMapper = new CDAEntryJsonMapper(cdaEntry.id(), cdaEntry.rawFields());
+
+            if (null != cdaEntryJsonMapper && null != cdaEntryJsonMapper.getRawFields()) {
+
+                cdaEntryJsonMapper.getRawFields().remove("createdEntries");
+            }
+
+            return gson.toJsonTree(cdaEntryJsonMapper)
+                    .getAsJsonObject().toString();
+
+
+        } catch (Exception e) {
+            logger.error("Unable to get contenttype for id " + id +
+                    " and locale " + locale + " " + e.getMessage());
+            return null;
+        }
+    }
 
     @Cacheable("contentful")
     public String testSpace() {
@@ -173,8 +233,8 @@ public class ContentfulService {
         }
     }
 
-    @Cacheable("contentful")
-    public String testHook() {
+    @CacheEvict(value = "SingleEntry", key = "#id.concat(#locale)")
+    public String testHook(String id, Locale locale) {
 
         return "WebHook is called";
 
